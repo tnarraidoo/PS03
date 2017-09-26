@@ -16,8 +16,14 @@ knitr::opts_chunk$set(echo = TRUE, fig.width=8, fig.height=4.5)
 
 # Load packages
 library(tidyverse)
+library(caret)
+library(dplyr)
+library(broom)
 data1 <- read_csv("data/data1.csv")
 data2 <- read_csv("data/data2.csv")
+# set seed for reproducibility
+set.seed(495)
+
 ```
 
 
@@ -31,14 +37,248 @@ For both `data1` and `data2` tibbles (a tibble is a data frame with some
 * Create a visualizaztion of this model plotted over the given $(x_i, y_i)$ points for $i=1,\ldots,n=3000$.
 * Give your estimate $\widehat{\sigma}$ of $\sigma$ where the noise component $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$.
 
+# Approach
+
+## Overview
+
+To find the splines model with the best out-of-sample predictive ability, we are going to implement the "k-fold" version of cross-validation to find the most appropriate degrees of freedom ($df$), where $k=10$. We are going to use the $smooth.spline()$ function in $R$ because this function requires us to only specify the $df$ of our model. Cross-validation is a model validation technique for assessing how the results of a statistical analysis will generalize to an independent data set (wikipedia, cross-validation).
+
+The goal of implementing cross-validation is to find an appropriate value for $df.$
+
+## Assumptions and rules
+
+* We are running a 10-fold cross-validation (i.e. k=10). This is because 10-fold validation is commonly used.
+* We are running our model for $df$ values ranging from 5 to 50. This is because we have estimated that the best $df$ would be in this range. This is arbitrary but almost all models we have come across so far had a $df$ in this range.
+
+## Steps
+
+* 1. Separate the observations into 10 sets, such that each observation is found in only one set.
+* 2. For each $df$ values ranging from 5 to 50, we perform the cross-validation, i.e.:
+    - 2.1 For each K from 1 to 10, create a test set with one fold, and create a train set with the remaining 9 folds.
+        + 2.11 For each train set, we run the smooth.spline() function for that value of $df$
+        + 2.12 We then run the predict() function on our train set model
+        + 2.13 We calculate the RMSE for each model and store the cumulative value so as to get a sum of the 10 runs
+    - 2.2 We find the average RMSE for each $df$,i.e., we take the sum we stored and divide by 10.
+    - 2.3 We save the average RMSE in a list 
+* 3. We find the minimum average RMSE and its associated $df$ value.
+
+## Visualizing and cross-checking
+
+To check our $df$ value, we will plot the average RMSE against its corresponding $df$ value. We will also plot the smooth.spline function and we will use the built-in "cv=T" option of the $smooth.spline()$ function, which gives us a $df$ value which would be appropriate for our model. 
 
 # Data 1
 
+## Solution
+
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# read data1
+dt1 <- read.csv("data/data1.csv")
+# check variable names
+names(dt1)
+```
+
+
+```{r, warning=FALSE}
+# set seed for reproducibility
+set.seed(495)
+# Separate the observations into 10 sets, such that each observation is found in only one set.
+k_fold_list <- createFolds(dt1$ID, k = 10, list = TRUE)
+# Create an empty list that will store the average RMSE value of each df.
+all_errors <- list()
+
+for(df in 5:50){
+  # Create an empty list that will store the RMSE of each model in the k-fold loop
+  small_error_list <- list()
+  # Create a variable to compute the RMSE for each model in the k-fold loop
+  small_error <- 0
+  # Create a variable to compute the average RMSE for each df
+  small_sum <- 0
+  
+  for(k in 1:10){
+    # Create our test set for each fold
+    test <- filter(dt1, ID %in% k_fold_list[[k]])
+    # Create our train set with the remaining 9-folds each time
+    train <- filter(dt1, !(ID %in% k_fold_list[[k]]))
+    
+    # train model with the smooth.spline function 
+    m1 <- smooth.spline(train$x, train$y, df=df)
+    # run the prediction based on our model
+    pred <- predict(m1, test$x)
+    # compute the RMSE for each model using the predicted and actual values of the test IDs
+    small_error_list[k] <- RMSE(pred$y, test$y)
+    small_sum <- small_sum + RMSE(pred$y, test$y)
+    # compute the average RMSE for each test fold
+    small_error <- small_sum/10
+  }
+  # save the average RMSE for each df in a list
+all_errors[df] <- small_error  
+}
+# display all average RMSE
+unlist(all_errors)
+# find minimum average RMSE
+min(unlist(all_errors)) # 15.04699 which corresponds to a df of 33
+all_errors[[33]] # df with smallest RMSE
+```
+
+From the list, we find that the minimum average RMSE is 15.04699 which corresponds to a $df$ of 33.
+
+We plot the df against the average RMSE from our cross-validation. We see the minimum RMSE corresponds to a df value of around 33. A good range of $df$ values would be between 30-40. That is why we keep our model with a df value of 33.
+
+```{r}
+#get the df and estimated average RMSE
+df <- list()
+rmse_pred <- list() 
+for(i in 5:50){
+  df[i] <- i
+  rmse_pred[i] <- all_errors[i]
+}
+# create a data frame with these 2 variables and plot them
+df1 <- cbind(unlist(df), unlist(rmse_pred))
+df1 <- as.data.frame(df1)
+ggplot(df1, aes(x=V1, y=V2)) +
+  geom_point() +
+  labs(title="DF vs Estimated Average RMSE") +
+  labs(x="DF") +
+  labs(y="Estimated Average RMSE from CV") +
+  geom_point(data=df1[29, ], aes(x=V1, y=V2), colour="red", size=2) #29 is the position of df=33 because we start df from 5
+```
+
+
+Now, we plot our spline model with $df$ = 33.
+```{r}
+splines_model <- smooth.spline(x=dt1$x, y=dt1$y, df = 33)
+splines_model_tidy <- splines_model %>% 
+  broom::augment() 
+plot <- ggplot(splines_model_tidy, aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="blue") +
+  ggtitle("Data 1 with df =33")
+plot
+```
+
+We see that that the line follows the overall trend even though it is not too smooth. However, we also have a lot of data points which are close to each other and dense, which would account for this 'wiggliness.'
+
+We now turn to our estimate $\hat{\sigma}$ of $\sigma$, where the noise component, $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$. We look at the summary of our model. And we see that we have some mising values for our residuals. To find $\hat{\sigma}$, we will remove the missing values. Our $\hat{\sigma}$ is around 15 units.
+
+```{r}
+summary(splines_model_tidy)
+sd(splines_model_tidy$.resid, na.rm =T)
+```
+
+
+Out of curiosity, if we use our whole Data 1 set and use the built-in 'cv=T' option, we get a $df$ value of 34.41222.
+
+```{r, warning=FALSE}
+#use cross validation to find appropriate degrees of freedom
+finding_df <- smooth.spline(dt1$x, dt1$y, cv=T)
+finding_df
 ```
 
 # Data 2
 
+## Solution
+
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
+#read data2
+dt2 <- read.csv("data/data2.csv")
+names(dt2)
 ```
+
+```{r, warning=FALSE}
+# set seed for reproducibility
+set.seed(495)
+# Separate the observations into 10 sets, such that each observation is found in only one set.
+k_fold_list <- createFolds(dt2$ID, k = 10, list = TRUE)
+# Create an empty list that will store the average RMSE value of each df.
+all_errors <- list()
+
+for(df in 5:50){
+  # Create an empty list that will store the RMSE of each model in the k-fold loop
+  small_error_list <- list()
+  # Create a variable to compute the RMSE for each model in the k-fold loop
+  small_error <- 0
+  # Create a variable to compute the average RMSE for each df
+  small_sum <- 0
+  
+  for(k in 1:10){
+    # Create our test set for each fold
+    test2 <- filter(dt2, ID %in% k_fold_list[[k]])
+    # Create our train set with the remaining 9-folds each time
+    train2 <- filter(dt2, !(ID %in% k_fold_list[[k]]))
+    
+    # train model with the smooth.spline function 
+    m2 <- smooth.spline(train2$x, train2$y, df=df)
+    # run the prediction based on our model
+    pred2 <- predict(m2, test2$x)
+    # compute the RMSE for each model using the predicted and actual values of the test IDs
+    small_error_list[k] <- RMSE(pred2$y, test2$y)
+    small_sum <- small_sum + RMSE(pred2$y, test2$y)
+    # compute the average RMSE for each test fold
+    small_error <- small_sum/10
+  }
+  # save the average RMSE for each df in a list
+all_errors[df] <- small_error  
+}
+# display all average RMSE
+unlist(all_errors)
+# find minimum average RMSE
+min(unlist(all_errors)) # 24.94002 which corresponds to a df of 27
+all_errors[[27]] # df with smallest RMSE
+```
+
+From the list, we find that the minimum average RMSE is 24.94002 which corresponds to the $df$ with value 27.
+
+We plot the df against the average RMSE from our cross-validation. We see the minimum RMSE corresponds to a df value of around 27 A good range of $df$ values would be between 25 and 30. That is why we keep our model with a df value of 27.
+
+```{r}
+#get the df and estimated average RMSE
+df <- list()
+rmse_pred2 <- list() 
+for(i in 5:50){
+  df[i] <- i
+  rmse_pred2[i] <- all_errors[i]
+}
+# create a data frame with these 2 variables and plot them
+df2 <- cbind(unlist(df), unlist(rmse_pred2))
+df2 <- as.data.frame(df2)
+ggplot(df2, aes(x=V1, y=V2)) +
+  geom_point() +
+  labs(title="DF vs Estimated Average RMSE") +
+  labs(x="DF") +
+  labs(y="Estimated Average RMSE from CV") +
+  geom_point(data=df2[23, ], aes(x=V1, y=V2), colour="red", size=2) #position of df=27 is 23 because we start df from 5
+```
+
+Now, we plot our spline model with $df$ = 27.
+```{r}
+splines_model <- smooth.spline(x=dt2$x, y=dt2$y, df = 27)
+splines_model_tidy <- splines_model %>% 
+  broom::augment() 
+plot <- ggplot(splines_model_tidy, aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="blue") +
+  ggtitle("Data 2 with df =27")
+plot
+```
+
+We see that that the line follows the overall trend even though it is not too smooth but it is better when compared to the 'wiggliness' of Data 1's. Again, we also have a lot of data points which are which are close to each other and dense, which would account for this 'wiggliness.'
+
+We now turn to our estimate $\hat{\sigma}$ of $\sigma$, where the noise component, $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$. We look at the summary of our model. And we see that we have some mising values for our residuals. To find $\hat{\sigma}$, we will remove the missing values. Our $\hat{\sigma}$ is around 25 units.
+
+```{r}
+summary(splines_model_tidy)
+sd(splines_model_tidy$.resid, na.rm =T)
+```
+
+Out of curiosity, if we use our whole Data 2 set and use the built-in 'cv=T' option, we get a $df$ value of 27.66454.
+
+```{r, warning=FALSE}
+#use cross validation to find appropriate degrees of freedom
+finding_df <- smooth.spline(dt2$x, dt2$y, cv=T)
+finding_df
+```
+
+# Conclusion
+
+For both Data Sets, our estimated $df$ values matched those of the built-in 'cv=T' option of the smooth.spline() function.
 
