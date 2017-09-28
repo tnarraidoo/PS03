@@ -114,7 +114,7 @@ for(df in 5:50){
 all_errors[df] <- small_error  
 }
 # display all average RMSE
-unlist(all_errors)
+#unlist(all_errors)
 # find minimum average RMSE
 min(unlist(all_errors)) # 15.04699 which corresponds to a df of 33
 all_errors[[33]] # df with smallest RMSE
@@ -161,7 +161,7 @@ We see that that the line follows the overall trend even though it is not too sm
 We now turn to our estimate $\hat{\sigma}$ of $\sigma$, where the noise component, $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$. We look at the summary of our model. And we see that we have some mising values for our residuals. To find $\hat{\sigma}$, we will remove the missing values. Our $\hat{\sigma}$ is around 15 units.
 
 ```{r}
-summary(splines_model_tidy)
+#summary(splines_model_tidy)
 sd(splines_model_tidy$.resid, na.rm =T)
 ```
 
@@ -171,7 +171,7 @@ Out of curiosity, if we use our whole Data 1 set and use the built-in 'cv=T' opt
 ```{r, warning=FALSE}
 #use cross validation to find appropriate degrees of freedom
 finding_df <- smooth.spline(dt1$x, dt1$y, cv=T)
-finding_df
+finding_df$df
 ```
 
 # Data 2
@@ -220,7 +220,7 @@ for(df in 5:50){
 all_errors[df] <- small_error  
 }
 # display all average RMSE
-unlist(all_errors)
+# unlist(all_errors)
 # find minimum average RMSE
 min(unlist(all_errors)) # 24.94002 which corresponds to a df of 27
 all_errors[[27]] # df with smallest RMSE
@@ -266,7 +266,7 @@ We see that that the line follows the overall trend even though it is not too sm
 We now turn to our estimate $\hat{\sigma}$ of $\sigma$, where the noise component, $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$. We look at the summary of our model. And we see that we have some mising values for our residuals. To find $\hat{\sigma}$, we will remove the missing values. Our $\hat{\sigma}$ is around 25 units.
 
 ```{r}
-summary(splines_model_tidy)
+#summary(splines_model_tidy)
 sd(splines_model_tidy$.resid, na.rm =T)
 ```
 
@@ -275,7 +275,7 @@ Out of curiosity, if we use our whole Data 2 set and use the built-in 'cv=T' opt
 ```{r, warning=FALSE}
 #use cross validation to find appropriate degrees of freedom
 finding_df <- smooth.spline(dt2$x, dt2$y, cv=T)
-finding_df
+finding_df$df
 ```
 
 # Conclusion
