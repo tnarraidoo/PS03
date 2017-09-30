@@ -74,7 +74,7 @@ To check our $df$ value, we will plot the average RMSE against its corresponding
 # read data1
 dt1 <- read.csv("data/data1.csv")
 # check variable names
-names(dt1)
+# names(dt1)
 ```
 
 
@@ -181,7 +181,7 @@ finding_df$df
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
 #read data2
 dt2 <- read.csv("data/data2.csv")
-names(dt2)
+#names(dt2)
 ```
 
 ```{r, warning=FALSE}
